@@ -11,7 +11,6 @@ import re
 import unicodedata
 
 import numpy as np
-from regex import F
 import tensorflow as tf
 from fastprogress import master_bar, progress_bar
 from seqeval.metrics import classification_report

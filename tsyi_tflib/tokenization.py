@@ -28,13 +28,13 @@ import unicodedata
 
 import six
 import tensorflow as tf
-import tensorflow_hub as hub
+#import tensorflow_hub as hub
 import os
 import hashlib
 import tempfile
-import tensorflow_text as text  # Registers the ops.
+#import tensorflow_text as text  # Registers the ops.
 import numpy as np
-from official.nlp.bert.tokenization import FullSentencePieceTokenizer, FullTokenizer
+from tsyi_tflib.official.nlp.bert.tokenization import FullSentencePieceTokenizer, FullTokenizer
 import sentencepiece as spm
 
 SPIECE_UNDERLINE = u"▁".encode("utf-8")
