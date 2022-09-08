@@ -12,7 +12,7 @@ setup(
     python_requires='>=3',
     include_data_package=True,
     packages=find_packages(exclude = []),
-    package_data={'':['data/*.txt']},
+    package_data={'':['data/tech_name_tag/*.txt']},
     zip_safe=False,
     install_requires=[
         'numpy>=1.19.2'
