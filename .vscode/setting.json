@@ -1,0 +1,23 @@
+{
+    "python.pythonPath": "/home/tsyi/miniconda3/envs/tf2/bin/python",
+    "python.linting.pylintPath": "/home/tsyi/miniconda3/envs/tf2/bin/pylint",
+    "python.autoComplete.extraPaths": ["."],
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.pydocstyleEnabled": false,
+    "python.linting.pylintArgs": ["--indent-string='  '"],
+    "python.formatting.autopep8Args": ["--indent-size=2"],
+    "workbench.colorCustomizations": {
+        "editor.selectionBackground": "#135564",
+        "editor.selectionHighlightBackground": "#135564"
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/*/**": true
+    },
+    "jupyter.jupyterServerType": "local",
+    "python.analysis.extraPaths": [
+        "."
+    ]
+}
