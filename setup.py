@@ -13,7 +13,6 @@ setup(
     include_data_package=True,
     packages=find_packages(exclude = []),
     package_data={'':['data/*.txt']},
-    data_files=[('config', ['cfg1/text1.cfg', 'cfg2/text2.cfg'])],
     zip_safe=False,
     install_requires=[
         'numpy>=1.19.2'
