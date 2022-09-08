@@ -12,7 +12,7 @@ setup(
     python_requires='>=3',
     include_data_package=True,
     packages=find_packages(exclude = []),
-    package_dir={'': 'tsyi_tflib'},
+    package_dir={'': ''},
     package_data={'':['data/*.txt']},
     data_files=[('', ['cfg1/text1.cfg', 'cfg2/text2.cfg'])],
     zip_safe=False,
