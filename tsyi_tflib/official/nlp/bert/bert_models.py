@@ -16,13 +16,13 @@
 
 import gin
 import tensorflow as tf
-import tensorflow_hub as hub
+# import tensorflow_hub as hub
 
-from official.modeling import tf_utils
-from official.nlp.albert import configs as albert_configs
-from official.nlp.bert import configs
-from official.nlp.modeling import models
-from official.nlp.modeling import networks
+from tsyi_tflib.official.modeling import tf_utils
+from tsyi_tflib.official.nlp.albert import configs as albert_configs
+from tsyi_tflib.official.nlp.bert import configs
+from tsyi_tflib.official.nlp.modeling import models
+from tsyi_tflib.official.nlp.modeling import networks
 
 
 class BertPretrainLossAndMetricLayer(tf.keras.layers.Layer):
