@@ -39,8 +39,8 @@ import sentencepiece as spm
 
 SPIECE_UNDERLINE = u"▁".encode("utf-8")
 
-import MeCab
-mecab_ko_dic = MeCab.Tagger("-d /usr/local/lib/mecab/dic/mecab-ko-dic")
+# import MeCab
+# mecab_ko_dic = MeCab.Tagger("-d /usr/local/lib/mecab/dic/mecab-ko-dic")
 
 # 입력 텍스트의 띄어쓰기가 많아진다. 띄어쓰기를 보존해야 할 경우 에라 발생
 def mecab_bert(_str):
