@@ -12,9 +12,9 @@ setup(
     python_requires='>=3',
     include_data_package=True,
     packages=find_packages(exclude = []),
-    package_dir={'':'src'},
+    package_dir={'tsyi_tflib':'src'},
     package_data={'tsyi_tflib':['data/*.txt']},
-    data_files=[('config/cfg', ['cfg1/text1.cfg', 'cfg2/text2.cfg'])],
+    data_files=[('config', ['cfg1/text1.cfg', 'cfg2/text2.cfg'])],
     zip_safe=False,
     install_requires=[
         'numpy>=1.19.2'
