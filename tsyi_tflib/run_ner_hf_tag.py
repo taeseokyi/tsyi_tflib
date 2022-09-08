@@ -20,11 +20,11 @@ from seqeval.metrics import classification_report
 # BertNer_ORG 는 공개 학습 bert 모델이 tf 2.x 와 호환되는 것이 없다.
 # pylint:disable=unused-import
 from transformers import AutoTokenizer, PreTrainedTokenizerFast, TFBartModel, TFElectraModel
-from model import BertNerHF_tag
+from tsyi_tflib.model import BertNerHF_tag
 
-from optimization import AdamWeightDecay, WarmUp
-from tokenization import HubPreprocessor, FullTokenizer_mecab as FullTokenizer, preprocess_text, convert_to_unicode, SPIECE_UNDERLINE
-from official.common import distribute_utils
+from tsyi_tflib.optimization import AdamWeightDecay, WarmUp
+from tsyi_tflib.tokenization import HubPreprocessor, FullTokenizer_mecab as FullTokenizer, preprocess_text, convert_to_unicode, SPIECE_UNDERLINE
+from tsyi_tflib.official.common import distribute_utils
 
 # https urlopen 오류 대응: export SSL_CERT_DIR=/etc/ssl/certs 를 해주거나, 아래를 실행함.
 '''
