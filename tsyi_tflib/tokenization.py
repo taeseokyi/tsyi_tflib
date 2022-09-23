@@ -33,14 +33,15 @@ import os
 import hashlib
 import tempfile
 #import tensorflow_text as text  # Registers the ops.
-import numpy as np
-from tsyi_tflib.official.nlp.bert.tokenization import FullSentencePieceTokenizer, FullTokenizer
 import sentencepiece as spm
 
 SPIECE_UNDERLINE = u"▁".encode("utf-8")
 
-# import MeCab
-# mecab_ko_dic = MeCab.Tagger("-d /usr/local/lib/mecab/dic/mecab-ko-dic")
+#import MeCab
+#mecab_ko_dic = MeCab.Tagger("-d /usr/local/lib/mecab/dic/mecab-ko-dic")
+
+import mecab_ko
+mecab_ko_dic = mecab_ko.Tagger()
 
 # 입력 텍스트의 띄어쓰기가 많아진다. 띄어쓰기를 보존해야 할 경우 에라 발생
 def mecab_bert(_str):
@@ -301,24 +302,6 @@ class FullTokenizer_mecab_spm(object):
   @classmethod
   def from_scratch(cls, vocab_file, do_lower_case, spm_model_file):
     return FullTokenizer_mecab_spm(vocab_file, do_lower_case, spm_model_file)
-
-  @classmethod
-  def from_hub_module(cls, hub_module, use_spm=True):
-    """Get the vocab file and casing info from the Hub module."""
-    with tf.Graph().as_default():
-      albert_module = hub.Module(hub_module)
-      tokenization_info = albert_module(signature="tokenization_info",
-                                        as_dict=True)
-      with tf.Session() as sess:
-        vocab_file, do_lower_case = sess.run(
-            [tokenization_info["vocab_file"],
-             tokenization_info["do_lower_case"]])
-    if use_spm:
-      spm_model_file = vocab_file
-      vocab_file = None
-    return FullTokenizer_mecab_spm(
-        vocab_file=vocab_file, do_lower_case=do_lower_case,
-        spm_model_file=spm_model_file)
 
   def split_words(self, text):
     if self.sp_model:
@@ -626,58 +609,3 @@ def _is_punctuation(char):
     return True
   return False
 
-
-class HubPreprocessor(object):
-  """Runs end-to-end tensorflow-hub preprocessor(tokenization).
-
-  The interface of this class is intended to keep the same as above
-  Tensorflow HUB preprocessor modules for easier usage.
-  We guarantee BERT and ALBERT preprocessor.
-  """
-
-  def __init__(self, hub_module_url):
-    """Inits HubPreprocessor..
-
-    Args:
-      hub_module_url: The tf-ub url.
-      max_seq_length: Max input sequence.
-    """
-    self.preprocessor = hub.load(hub_module_url)
-    assets_path = os.path.join(tempfile.gettempdir(), "tfhub_modules", hashlib.sha1(hub_module_url.encode("utf8")).hexdigest(), 'assets')
-    vocab_file = os.listdir(assets_path)
-    if len(vocab_file) > 0:
-      self.vocab_file = os.path.join(assets_path, vocab_file[0])
-      self.is_sp_model = not vocab_file[0] == 'vocab.txt'
-    else:
-      self.is_sp_model = True # albert preprocessor 는 vocab.txt 도 없고 30k-cleaan.model 도 없다.
-    self.special_tokens = { '[PAD]':'padding_id', '[CLS]':'start_of_sequence_id', '[SEP]':'end_of_segment_id', '[MASK]':'mask_id' }
-
-  def tokenize(self, text): # 입력 text는 공백 분리된 단어로 가정한다.
-    """Tokenizes text into pieces."""
-    f1 = self.preprocessor.tokenize([text]).numpy()
-    if not self.is_sp_model:
-      f1 = [element for arrays in f1 for array in arrays for element in array]
-    else:
-      f1 = [element for array in f1 for element in array]
-    str_id_list = [str(t) for t in f1]
-
-    return str_id_list # string 으로 변환된 토큰 ID 리스트
-
-  def convert_tokens_to_ids(self, tokens): # string 으로 변환된 ID가 오는 것으로 가정한다.
-    """Converts a list of tokens to a list of ids.
-    
-    BERT 일때: { [PAD]:0, [UNK]:100, [CLS]:101, [SEP]:102, [MASK]:103 }
-    AlBERT 일때: { <pad>:0, <unk>:1, [CLS]:2, [SEP]:3, [MASK]:4 }
-    preprocessor.tokenize.get_special_tokens_dict() 조회: { [PAD]:padding_id, [CLS]:start_of_sequence_id, [SEP]:end_of_segment_id, [MASK]:mask_id }
-    """
-    id_tokens = []
-    for token in tokens:
-      if token in self.special_tokens:
-        id_tokens.append(self.preprocessor.tokenize.get_special_tokens_dict()[self.special_tokens[token]].numpy())
-      else:
-        id_tokens.append(int(token))
-    return id_tokens
-
-  def convert_ids_to_tokens(self, ids):
-    """Converts a list of ids ot a list of tokens."""
-    raise ValueError("Not implemented.")

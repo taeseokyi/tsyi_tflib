@@ -1,12 +1,8 @@
 from __future__ import absolute_import, division, print_function
 
-import os
-import hashlib
-import tempfile
-
 import tensorflow as tf
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast, TFBartModel, TFElectraModel  # Registers the ops. pylint:disable=unused-import
+from transformers import PreTrainedTokenizerFast  # Registers the ops. pylint:disable=unused-import
 
 
 class BertNerHF_tag(tf.keras.Model):
