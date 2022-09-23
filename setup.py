@@ -15,6 +15,13 @@ setup(
     package_data={'':['data/tech_name_tag/*.txt']},
     zip_safe=False,
     install_requires=[
-        'numpy>=1.19.2'
+        'numpy>=1.19.2',
+        'fastprogress==1.0.2',
+        'seqeval==1.2.2',
+        'tensorflow>=2.4.0',
+        'transformers>=4.15.0',
+        'sentencepiece==0.1.95',
+        'mecab-ko==1.0.0',
+        'mecab-ko-dic==1.0.0',
     ]
 )
