@@ -1,6 +1,8 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+from email import contentmanager
+from inspect import isdatadescriptor
 import json
 import logging
 import math
@@ -16,11 +18,11 @@ from seqeval.metrics import classification_report
 # pylint: disable=no-member
 # BertNer_ORG 는 공개 학습 bert 모델이 tf 2.x 와 호환되는 것이 없다.
 # pylint:disable=unused-import
-from transformers import PreTrainedTokenizerFast, TFBartModel
+from transformers import AutoTokenizer, PreTrainedTokenizerFast, TFBartModel, TFElectraModel
 from tsyi_tflib.model import BertNerHF_tag
 
 from tsyi_tflib.optimization import AdamWeightDecay, WarmUp
-from tsyi_tflib.official.nlp.bert.tokenization import preprocess_text, convert_to_unicode
+from tsyi_tflib.tokenization import HubPreprocessor, FullTokenizer_mecab as FullTokenizer, preprocess_text, convert_to_unicode, SPIECE_UNDERLINE
 from tsyi_tflib.official.common import distribute_utils
 
 # https urlopen 오류 대응: export SSL_CERT_DIR=/etc/ssl/certs 를 해주거나, 아래를 실행함.
@@ -144,8 +146,10 @@ class NerProcessor(DataProcessor):
     # return ["O", "B-MISC", "I-MISC", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "[CLS]", "[SEP]"]
     #return ["O", "B-TERM", "I-TERM", "B-MISC", "I-MISC", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "[CLS]", "[SEP]"]
     labels = ["O"]
-    labels += ["B-AFW", "B-PER", "B-LOC", "B-ORG", "B-NUM", "B-ANM", "B-CVL", "B-DAT", "B-TRM", "B-FLD", 'B-TIM', "B-EVT", "B-PLT", "B-MAT"]
-    labels += ["I-AFW", "I-PER", "I-LOC", "I-ORG", "I-NUM", "I-ANM", "I-CVL", "I-DAT", "I-TRM", "I-FLD", 'I-TIM', "I-EVT", "I-PLT", "I-MAT"]
+    #labels += ["B-AFW", "B-PER", "B-LOC", "B-ORG", "B-NUM", "B-ANM", "B-CVL", "B-DAT", "B-TRM", "B-FLD", 'B-TIM', "B-EVT", "B-PLT", "B-MAT"]
+    #labels += ["I-AFW", "I-PER", "I-LOC", "I-ORG", "I-NUM", "I-ANM", "I-CVL", "I-DAT", "I-TRM", "I-FLD", 'I-TIM', "I-EVT", "I-PLT", "I-MAT"]
+    labels += ["B-TT"]
+    labels += ["I-TT"]
     labels += ["[CLS]", "[SEP]"]  # [SEP] 은 끝나는 조건으로 항상 마지막에 위치
     return labels
 
@@ -160,85 +164,152 @@ class NerProcessor(DataProcessor):
 
 org_txt = '대북(對北) 인권단체인 ‘북한인권개선모임’ 등에 따르면 북한 노동자 6만∼7만 명이 러시아 중동 아프리카 중국 등에서 일하면서 연간 수억 달러 이상 벌어들인다.'
 tag_txt = '대북(對北) 인권단체인 ‘<북한인권개선모임:ORG>’ 등에 따르면 <북한:LOC> <노동자:CVL> <6만∼7만 명:NUM>이 <러시아 중동 아프리카 중국:LOC> 등에서 일하면서 <연간:DAT> 수억 <달러:CVL> 이상 벌어들인다.'
-p1 = re.compile(r'<\s*[^:]+:\w+\s*>')
+p1 = re.compile(r'<\s*[^<]+?:\w+\s*>')
 m = re.findall(p1, tag_txt) # 태깅 영역 모두 찿아줌.
-p2 = re.compile(r'<\s*([^:]+):(\w+)\s*>')
+p2 = re.compile(r'<\s*([^<]+)?:(\w+)\s*>')
 m = p2.match('<필리핀:LOC>') # m.groups()  --> ('필리핀', 'LOC')
 
-def cov_tag_text(org_txt, tag_txt, tokenizer):
-  tok = tokenizer.tokenize(org_txt)
-  _txt = p1.sub('▁', tag_txt)
-  tags = [ p2.match(x).groups() for x in p1.findall(tag_txt)]
-  tag_index = 0
-  label = []
-  _index = 0
-  len_txt = len(_txt)
-  len_tag = len(tags)
-  word = ""
-  for token in tok:
-    if token[0] in ('▁', '#'): # sp_model 단어 시작표시
-      tt = token[1:]
-    else:
-      tt = token
-    ch = _txt[_index]
-    while ch == ' ':
-      if _index < len_txt:
-        _index += 1
+def cov_tag_text(org_txt, tag_txt, tokenizer, first_ch='#'):
+  class struct_x:
+    _txt = ''
+    tags = ''
+    org_txt = ''
+    tok = ''
+    tag_index = 0
+    label = []
+    _index = 0
+    len_txt = 0
+    len_tag = 0
+    word = ""
+    token = ''
+    first_ch = ''
+    tt = ''
+    ch = ''
+    tag = ''
+    prefix_tag = ''
+    tt_txt = ''
+  param = struct_x()
+
+  def tag_compare(param): # 태깅 문자열과 토큰을 비교한다.
+    if param.ch == '▁':
+      if param.word == '':
+        (param.word, param.tag) = param.tags[param.tag_index]  # 태깅된 단어와 태그
+        if param.word == None: # 텀이 None 이면, 건너뛰고 진행함.
+          if param._index < param.len_txt:
+            param._index += 1
+            return 'recompare' # 현재 토큰을 한 번더 원본 text 와 비교한다.
+          else:
+            return 'break'
+        param.word = param.word.replace(' ', '')
+        param.prefix_tag = 'B-'
+      else:
+        param.prefix_tag = 'I-'
+      if len(param.tt) > len(param.word) and param.word == param.tt[:len(param.word)]:
+        if param._index < param.len_txt:
+          param._index += 1
+        else:
+          return 'break'
+        if param.tt[len(param.word):] == param._txt[param._index:param._index + (len(param.tt) - len(param.word))]:  # 마지막 조사까지 같은지 토큰 전체 비교
+          param.label.append(f'{param.prefix_tag}{param.tag}') # 라벨 추가
+          if param.tag_index < param.len_tag: # 태그 목록에서 다음 태그로 이동
+            param.tag_index += 1
+          else:
+            return 'break'
+          if param._index + (len(param.tt) - len(param.word)) < param.len_txt: # _txt(tag_text)에서_index 증가, word = "" 태깅 마무리
+            param._index += len(param.tt) - len(param.word)
+            param.word = ""
+            return 'continue'
+          else:
+            return 'break'
+        else:
+          return 'break'
+      if param.tt == param.word[:len(param.tt)]:
+        param.label.append(f'{param.prefix_tag}{param.tag}')
+        param.word = param.word[len(param.tt):]
+        if param.word == '':
+          if param.tag_index < param.len_tag:
+            param.tag_index += 1
+          else:
+            return 'break'
+          if param._index < param.len_txt:
+            param._index += 1
+          else:
+            return 'break'
+        return 'continue'
+    return 'pass'
+
+  def get_ch(param):
+    param.ch = param._txt[param._index]
+    while param.ch == ' ':
+      if param._index < param.len_txt:
+        param._index += 1
       else:
         break
-      ch = _txt[_index]
-    if ch == '▁':
-      if word == '':
-        (word, tag) = tags[tag_index]  # 태깅된 단어와 태그
-        word = word.replace(' ', '')
-        prefix_tag = 'B-'
-      else:
-        prefix_tag = 'I-'
-      if len(tt) > len(word) and word == tt[:len(word)]:
-        if _index < len_txt:
-          _index += 1
-        else:
-          break
-        if tt[len(word):] == _txt[_index:_index + (len(tt) - len(word))]:  # 마지막 조사까지 같은지 토큰 전체 비교
-          label.append(f'{prefix_tag}{tag}')
-          if tag_index < len_tag:
-            tag_index += 1
-          else:
-            break
-          if _index + (len(tt) - len(word)) < len_txt:
-            _index += len(tt) - len(word)
-            word = ""
-            continue
-          else:
-            break
-        else:
-          break
-      if tt == word[:len(tt)]:
-        label.append(f'{prefix_tag}{tag}')
-        word = word[len(tt):]
-        if word == '':
-          if tag_index < len_tag:
-            tag_index += 1
-          else:
-            break
-          if _index < len_txt:
-            _index += 1
-          else:
-            break
-        continue
-    
-    if tt == _txt[_index : _index + len(tt)]:
-      label.append('O')
-      if _index + len(tt) < len_txt:
-        _index += len(tt)
-      else:
-        break
+      param.ch = param._txt[param._index]
+
+  param._txt = p1.sub('▁', tag_txt) # 태그 치환
+  param.tags = [ p2.match(x).groups() for x in p1.findall(tag_txt)] # 태그 리스트 추출
+  param.org_txt = ''.join([''.join([x[0], x[1][0] if x[1][0] != None else '']) for x in zip(param._txt.split('▁'), param.tags+[('','')])]) # orgin text 생성
+  param.tok = tokenizer.tokenize(param.org_txt)
+  param.len_txt = len(param._txt)
+  param.len_tag = len(param.tags)
+  param.first_ch = first_ch
+
+  for token in param.tok:
+    param.token = token
+    if param.token[0] == param.first_ch: #  ('▁', '#')  word peice, sp_model 토큰 분리자 표시
+      param.tt = param.token[1:]
     else:
+      param.tt = param.token
+
+    get_ch(param)
+
+    if param.tt == '<unk>':
+      param.tt = param._txt[param._index]
+      if param.word != '':
+        param.tt = param.word[0]
+
+    result = tag_compare(param)
+    while result == 'recompare':
+      get_ch(param)
+      result = tag_compare(param)
+    if result == 'break':
       break
-  print(tok)
-  print(label)
-  assert(len(tok) == len(label))
-  return (tok, label)
+    if result == 'continue':
+      continue
+
+    param.tt_txt = param._txt[param._index : param._index + len(param.tt)]
+    if param.tt == param.tt_txt:
+      param.label.append('O')
+      if param._index + len(param.tt) < param.len_txt:
+        param._index += len(param.tt)
+      else:
+        break
+    else:
+      # 토큰 단어 끝에 태깅 단어의 일부가 포함된 경우 처리, 예: '"<일 정체성:TT>"'  쌍따옴표가 일이랑 붙어 '▁"일'처럼 하나의 토근이 됨
+      for i in range(len(param.tt)):
+        if param.tt[i] == param.tt_txt[i]:
+          continue
+        else:
+          param._index += i
+          param.tt = param.tt[i:]
+          param.ch = param._txt[param._index]
+          break
+
+      result = tag_compare(param)
+      if result == 'break':
+        break
+      if result == 'continue':
+        continue
+      break
+
+  if (len(param.tok) != len(param.label)):
+    print(org_txt)
+    print(tag_txt)
+    print(param.tok)
+    print(param.label)
+    assert(False)
+  return (param.tok, param.label)
 
 
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer, is_spm_model=False, do_lower_case=False):
@@ -257,7 +328,7 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
 
     line_a = unicodedata.normalize('NFC', line_a)
     line_b = unicodedata.normalize('NFC', line_b)
-    (_, labellist) = cov_tag_text(line_a, line_b, tokenizer)
+    (_, labellist) = cov_tag_text(line_a, line_b, tokenizer, first_ch = '▁' if is_spm_model else '#')
     
     label_ids = []
     label_ids.append(label_map["[CLS]"])  # 첫 토큰 추가
